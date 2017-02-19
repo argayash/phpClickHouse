@@ -52,7 +52,7 @@ echo "--------------------------------------------------------------------------
 echo "insert ALL file async NO gzip:\n";
 
 
-$db->settings()->max_execution_time(200);
+$db->settings()->maxExecutionTime(200);
 $time_start = microtime(true);
 
 $result_insert = $db->insertBatchFiles('summing_url_views', $file_data_names, [

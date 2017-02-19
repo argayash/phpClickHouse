@@ -65,12 +65,13 @@ class Http
 
     /**
      * Http constructor.
-     * @param $host
-     * @param $port
-     * @param $username
-     * @param $password
+     *
+     * @param string $host
+     * @param int $port
+     * @param string $username
+     * @param string $password
      */
-    public function __construct($host, $port, $username, $password)
+    public function __construct(string $host, int $port, string $username, string $password = '')
     {
         $this->setHost($host, $port);
 

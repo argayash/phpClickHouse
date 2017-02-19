@@ -13,48 +13,53 @@ class Settings
     /**
      * @var Client
      */
-    private $client = false;
+    protected $client;
 
     /**
      * @var array
      */
-    private $settings = [];
+    protected $settings = [];
 
-    private $_ReadOnlyUser=false;
+    /**
+     * @var bool
+     */
+    protected $readOnlyUser = false;
 
 
     /**
      * Settings constructor.
+     *
      * @param Http $client
      */
     public function __construct(Http $client)
     {
-        $default = [
-            'extremes'                => false,
-            'readonly'                => true,
-            'max_execution_time'      => 20,
-            'enable_http_compression' => 0
+        $this->settings = [
+            'extremes' => false,
+            'readonly' => true,
+            'max_execution_time' => 20,
+            'enable_http_compression' => 0,
         ];
 
-        $this->settings = $default;
         $this->client = $client;
     }
 
     /**
-     * @param $key
+     * @param string $key
+     *
      * @return mixed
      */
-    private function get($key)
+    private function get(string $key)
     {
         return $this->settings[$key];
     }
 
     /**
-     * @param $key
+     * @param string $key
      * @param $value
+     *
      * @return $this
      */
-    public function set($key, $value)
+    public function set(string $key, $value)
     {
         $this->settings[$key] = $value;
         return $this;
@@ -70,6 +75,7 @@ class Settings
 
     /**
      * @param $db
+     *
      * @return $this
      */
     public function database($db)
@@ -96,19 +102,22 @@ class Settings
 
     /**
      * @param $flag
+     *
      * @return $this
      */
     public function enableHttpCompression($flag)
     {
-        $this->set('enable_http_compression', intval($flag));
+        $this->set('enable_http_compression', (int)$flag);
+
         return $this;
     }
 
     /**
-     * @param $flag
+     * @param bool $flag
+     *
      * @return $this
      */
-    public function readonly($flag)
+    public function readonly(bool $flag)
     {
         $this->set('readonly', $flag);
         return $this;
@@ -116,11 +125,13 @@ class Settings
 
     /**
      * @param $time
+     *
      * @return $this
      */
-    public function max_execution_time($time)
+    public function maxExecutionTime($time)
     {
         $this->set('max_execution_time', $time);
+
         return $this;
     }
 
@@ -133,12 +144,13 @@ class Settings
     }
 
     /**
-     * @param $settings_array
-     * @return $this
+     * @param array $settingsArray
+     *
+     * @return self
      */
-    public function apply($settings_array)
+    public function apply(array $settingsArray)
     {
-        foreach ($settings_array as $key => $value) {
+        foreach ($settingsArray as $key => $value) {
             $this->set($key, $value);
         }
 
@@ -146,27 +158,27 @@ class Settings
     }
 
     /**
-     * @param $flag
+     * @param bool $flag
      */
-    public function setReadOnlyUser($flag)
+    public function setReadOnlyUser(bool $flag)
     {
-        $this->_ReadOnlyUser=$flag;
+        $this->readOnlyUser = $flag;
     }
 
     /**
-     *
-     *
+     * @return bool
      */
-    public function isReadOnlyUser()
+    public function isReadOnlyUser(): bool
     {
-        return $this->_ReadOnlyUser;
+        return $this->readOnlyUser;
     }
 
     /**
-     * @param $name
+     * @param string $name
+     *
      * @return mixed|null
      */
-    public function getSetting($name)
+    public function getSetting(string $name)
     {
         if (!isset($this->settings[$name])) {
             return null;

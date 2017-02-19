@@ -2,6 +2,8 @@
 
 namespace ClickHouseDB;
 
+use ClickHouseDB\Query\Degeneration\Bindings;
+use ClickHouseDB\Query\Degeneration\Conditions;
 use ClickHouseDB\Transport\Http;
 
 /**
@@ -10,99 +12,101 @@ use ClickHouseDB\Transport\Http;
  */
 class Client
 {
+    const FORMAT_TAB_SEPARATED = 'TabSeparated';
+    const FORMAT_TAB_SEPARATED_WITH_NAMES = 'TabSeparatedWithNames';
+    const FORMAT_CSV = 'CSV';
+    const FORMAT_CSV_WITH_NAMES = 'CSVWithNames';
+
+    const PARTITIONS_CHUNK_SIZE = 100;
+
     /**
      * @var Http
      */
-    private $_transport = false;
+    protected $transport;
 
     /**
      * @var string
      */
-    private $_connect_username = false;
+    protected $connectUsername;
 
     /**
      * @var string
      */
-    private $_connect_password = false;
+    protected $connectPassword;
 
     /**
      * @var string
      */
-    private $_connect_host = false;
+    protected $connectHost;
 
     /**
      * @var int
      */
-    private $_connect_port = false;
+    protected $connectPort;
 
     /**
      * @var bool
      */
-    private $_connect_user_readonly=false;
+    protected $connectUserReadonly;
     /**
      * @var array
      */
-    private $_support_format=['TabSeparated','TabSeparatedWithNames','CSV','CSVWithNames'];
+    protected static $supportedFormats = [
+        self::FORMAT_TAB_SEPARATED,
+        self::FORMAT_TAB_SEPARATED_WITH_NAMES,
+        self::FORMAT_CSV,
+        self::FORMAT_CSV_WITH_NAMES
+    ];
+
     /**
      * Client constructor.
-     * @param $connect_params
+     *
+     * @param array $connectParams
      * @param array $settings
      */
-    public function __construct($connect_params, $settings = [])
+    public function __construct(array $connectParams, array $settings = [])
     {
-        if (!isset($connect_params['username'])) {
+        if (!isset($connectParams['username'])) {
             throw  new \InvalidArgumentException('not set username');
         }
 
-        if (!isset($connect_params['password'])) {
+        if (!isset($connectParams['password'])) {
             throw  new \InvalidArgumentException('not set password');
         }
 
-        if (!isset($connect_params['port'])) {
+        if (!isset($connectParams['port'])) {
             throw  new \InvalidArgumentException('not set port');
         }
 
-        if (!isset($connect_params['host'])) {
+        if (!isset($connectParams['host'])) {
             throw  new \InvalidArgumentException('not set host');
         }
 
-        if (isset($connect_params['settings']) && is_array($connect_params['settings'])) {
+        if (isset($connectParams['settings']) && is_array($connectParams['settings'])) {
             if (empty($settings)) {
-                $settings = $connect_params['settings'];
+                $settings = $connectParams['settings'];
             }
         }
 
-        $this->_connect_username    = $connect_params['username'];
-        $this->_connect_password    = $connect_params['password'];
-        $this->_connect_port        = $connect_params['port'];
-        $this->_connect_host        = $connect_params['host'];
+        $this->connectUsername = $connectParams['username'];
+        $this->connectPassword = $connectParams['password'];
+        $this->connectPort = $connectParams['port'];
+        $this->connectHost = $connectParams['host'];
 
+        $this->setTransport(new Http($this->connectHost, $this->connectPort, $this->connectUsername,
+            $this->connectPassword));
 
-        // init transport class
-        $this->_transport = new Http(
-            $this->_connect_host,
-            $this->_connect_port,
-            $this->_connect_username,
-            $this->_connect_password
-        );
-
-
-        $this->_transport->addQueryDegeneration(new \ClickHouseDB\Query\Degeneration\Bindings());
+        $this->getTransport()->addQueryDegeneration(new Bindings());
 
         // apply settings to transport class
         $this->settings()->database('default');
-        if (sizeof($settings)) {
+        if (count($settings)) {
             $this->settings()->apply($settings);
         }
 
-
-        if (isset($connect_params['readonly']))
-        {
-            $this->setReadOnlyUser($connect_params['readonly']);
+        if (isset($connectParams['readonly'])) {
+            $this->setReadOnlyUser($connectParams['readonly']);
         }
-
-
-
 
     }
 
@@ -113,9 +117,10 @@ class Client
      */
     public function setReadOnlyUser($flag)
     {
-        $this->_connect_user_readonly=$flag;
-        $this->settings()->setReadOnlyUser($this->_connect_user_readonly);
+        $this->connectUserReadonly = $flag;
+        $this->settings()->setReadOnlyUser($this->connectUserReadonly);
     }
+
     /**
      * Очистить пред обработку запроса [шаблонизация]
      *
@@ -123,18 +128,19 @@ class Client
      */
     public function cleanQueryDegeneration()
     {
-        return $this->_transport->cleanQueryDegeneration();
+        return $this->transport()->cleanQueryDegeneration();
     }
 
     /**
      * Добавить пред обработку запроса
      *
      * @param Query\Degeneration $degeneration
+     *
      * @return bool
      */
     public function addQueryDegeneration(Query\Degeneration $degeneration)
     {
-        return $this->_transport->addQueryDegeneration($degeneration);
+        return $this->getTransport()->addQueryDegeneration($degeneration);
     }
 
     /**
@@ -144,8 +150,9 @@ class Client
      */
     public function enableQueryConditions()
     {
-        return $this->_transport->addQueryDegeneration(new \ClickHouseDB\Query\Degeneration\Conditions());
+        return $this->getTransport()->addQueryDegeneration(new Conditions());
     }
+
     /**
      * Set connection host
      *
@@ -154,12 +161,11 @@ class Client
     public function setHost($host)
     {
 
-        if (is_array($host))
-        {
-            $host=array_rand(array_flip($host));
+        if (is_array($host)) {
+            $host = array_rand(array_flip($host));
         }
 
-        $this->_connect_host=$host;
+        $this->connectHost = $host;
         $this->transport()->setHost($host);
     }
 
@@ -167,11 +173,12 @@ class Client
      * Таймаут
      *
      * @param $timeout
+     *
      * @return Settings
      */
     public function setTimeout($timeout)
     {
-       return $this->settings()->max_execution_time($timeout);
+        return $this->settings()->maxExecutionTime($timeout);
     }
 
     /**
@@ -212,10 +219,10 @@ class Client
      */
     public function transport()
     {
-        if (!$this->_transport) {
+        if (!$this->getTransport()) {
             throw  new \InvalidArgumentException('Empty transport class');
         }
-        return $this->_transport;
+        return $this->getTransport();
     }
 
     /**
@@ -223,7 +230,7 @@ class Client
      */
     public function getConnectHost()
     {
-        return $this->_connect_host;
+        return $this->connectHost;
     }
 
     /**
@@ -231,7 +238,7 @@ class Client
      */
     public function getConnectPassword()
     {
-        return $this->_connect_password;
+        return $this->connectPassword;
     }
 
     /**
@@ -239,7 +246,7 @@ class Client
      */
     public function getConnectPort()
     {
-        return $this->_connect_port;
+        return $this->connectPort;
     }
 
     /**
@@ -247,7 +254,7 @@ class Client
      */
     public function getConnectUsername()
     {
-        return $this->_connect_username;
+        return $this->connectUsername;
     }
 
     /**
@@ -257,7 +264,19 @@ class Client
      */
     public function getTransport()
     {
-        return $this->_transport;
+        return $this->transport;
+    }
+
+    /**
+     * @param Http $httpTransport
+     *
+     * @return self
+     */
+    public function setTransport(Http $httpTransport)
+    {
+        $this->transport = $httpTransport;
+
+        return $this;
     }
 
 
@@ -285,20 +304,23 @@ class Client
      * @param $sql
      * @param array $bindings
      * @param bool $exception
+     *
      * @return Statement
      */
-    public function write($sql, $bindings = [], $exception = true)
+    public function write($sql, array $bindings = [], bool $exception = true)
     {
         return $this->transport()->write($sql, $bindings, $exception);
     }
 
     /**
      * @param $db
+     *
      * @return $this
      */
     public function database($db)
     {
         $this->settings()->database($db);
+
         return $this;
     }
 
@@ -306,11 +328,13 @@ class Client
      * Логгировать запросы и писать лог в системную таблицу. <database>system</database> <table>query_log</table>
      *
      * @param bool $flag
+     *
      * @return $this
      */
     public function enableLogQueries($flag = true)
     {
-        $this->settings()->set('log_queries',intval($flag));
+        $this->settings()->set('log_queries', (int)$flag);
+
         return $this;
     }
 
@@ -318,11 +342,13 @@ class Client
      * Сжимать результат, если клиент по HTTP сказал, что он понимает данные, сжатые методом gzip или deflate
      *
      * @param bool $flag
+     *
      * @return $this
      */
-    public function enableHttpCompression($flag = true)
+    public function enableHttpCompression(bool $flag = true)
     {
         $this->settings()->enableHttpCompression($flag);
+
         return $this;
     }
 
@@ -330,26 +356,28 @@ class Client
      * Считать минимумы и максимумы столбцов результата. Они могут выводиться в JSON-форматах.
      *
      * @param bool $flag
+     *
      * @return $this
      */
-    public function enableExtremes($flag = true)
+    public function enableExtremes(bool $flag = true)
     {
-        $this->settings()->set('extremes',intval($flag));
+        $this->settings()->set('extremes', (int)$flag);
         return $this;
     }
 
     /**
      * SELECT
      *
-     * @param $sql
+     * @param Query|string $sql
      * @param array $bindings
      * @param WhereInFile $whereInFile
      * @param WriteToFile $writeToFile
+     *
      * @return Statement
      */
-    public function select($sql, $bindings = [], $whereInFile = null, $writeToFile=null)
+    public function select($sql, array $bindings = [], WhereInFile $whereInFile = null, WriteToFile $writeToFile = null)
     {
-        return $this->transport()->select($sql, $bindings, $whereInFile,$writeToFile);
+        return $this->transport()->select($sql, $bindings, $whereInFile, $writeToFile);
     }
 
     /**
@@ -365,15 +393,20 @@ class Client
     /**
      * Подготовить запрос SELECT
      *
-     * @param $sql
+     * @param Query|string $sql
      * @param array $bindings
      * @param WhereInFile $whereInFile
      * @param WriteToFile $writeToFile
+     *
      * @return Statement
      */
-    public function selectAsync($sql, $bindings = [], $whereInFile = null,$writeToFile=null)
-    {
-        return $this->transport()->selectAsync($sql, $bindings, $whereInFile,$writeToFile);
+    public function selectAsync(
+        $sql,
+        array $bindings = [],
+        WhereInFile $whereInFile = null,
+        WriteToFile $writeToFile = null
+    ) {
+        return $this->transport()->selectAsync($sql, $bindings, $whereInFile, $writeToFile);
     }
 
     /**
@@ -399,12 +432,13 @@ class Client
     /**
      * statement = SHOW CREATE TABLE
      *
-     * @param $table
+     * @param string $table
+     *
      * @return mixed
      */
-    public function showCreateTable($table)
+    public function showCreateTable(string $table)
     {
-        return ($this->select('SHOW CREATE TABLE '.$table)->fetchOne('statement'));
+        return $this->select('SHOW CREATE TABLE ' . $table)->fetchOne('statement');
     }
 
     /**
@@ -430,12 +464,13 @@ class Client
     /**
      * Вставить массив
      *
-     * @param $table
-     * @param $values
+     * @param string $table
+     * @param array $values
      * @param array $columns
+     *
      * @return Statement
      */
-    public function insert($table, $values, $columns = [])
+    public function insert(string $table, array $values, array $columns = [])
     {
         $sql = 'INSERT INTO ' . $table;
 
@@ -449,62 +484,56 @@ class Client
             $sql .= ' (' . FormatLine::Insert($row) . '), ';
         }
         $sql = trim($sql, ', ');
+
         return $this->transport()->write($sql);
     }
 
     /**
      * insert TabSeparated files
      *
-     * @param $table_name
-     * @param $file_names
-     * @param $columns_array
+     * @param $tableName
+     * @param $fileNames
+     * @param $columnsArray
+     *
      * @return mixed
      */
-    public function insertBatchTSVFiles($table_name, $file_names, $columns_array)
+    public function insertBatchTSVFiles($tableName, $fileNames, $columnsArray)
     {
-        return $this->insertBatchFiles($table_name,$file_names,$columns_array,'TabSeparated');
+        return $this->insertBatchFiles($tableName, $fileNames, $columnsArray, self::FORMAT_TAB_SEPARATED);
     }
+
     /**
      *
+     * @param string $tableName
+     * @param array|string $fileNames
+     * @param array $columnsArray
+     * @param string $format ['TabSeparated','TabSeparatedWithNames','CSV','CSVWithNames']
      *
-     * @param $table_name
-     * @param $file_names
-     * @param $columns_array
-     * @param $format string ['TabSeparated','TabSeparatedWithNames','CSV','CSVWithNames']
      * @return array
      */
-    public function insertBatchFiles($table_name, $file_names, $columns_array,$format="CSV")
+    public function insertBatchFiles($tableName, $fileNames, array $columnsArray, $format = self::FORMAT_CSV)
     {
-        if (is_string($file_names))
-        {
-            $file_names=[$file_names];
+        if (is_string($fileNames)) {
+            $fileNames = [$fileNames];
         }
         if ($this->getCountPendingQueue() > 0) {
             throw new QueryException('Queue must be empty, before insertBatch, need executeAsync');
         }
 
-        if (!in_array($format,$this->_support_format))
-        {
+        if (!in_array($format, self::$supportedFormats, true)) {
             throw new QueryException('Format not support in insertBatchFiles');
         }
 
         $result = [];
 
-        foreach ($file_names as $fileName) {
+        foreach ((array)$fileNames as $fileName) {
             if (!is_file($fileName) || !is_readable($fileName)) {
-                throw  new QueryException('Cant read file: ' . $fileName.' '.(is_file($fileName)?'':' is not file'));
+                throw  new QueryException('Cant read file: ' . $fileName . ' ' . (is_file($fileName) ? '' : ' is not file'));
             }
 
-            if (!$columns_array)
-            {
-                $sql = 'INSERT INTO ' . $table_name . ' FORMAT '.$format;
+            $sql = 'INSERT INTO ' . $tableName . (!empty($columnsArray) ? (' ( ' . implode(', ',
+                        $columnsArray) . ' )') : '') . ' FORMAT ' . $format;
 
-            }
-            else
-            {
-                $sql = 'INSERT INTO ' . $table_name . ' ( ' . implode(',', $columns_array) . ' ) FORMAT '.$format;
-
-            }
             $result[$fileName] = $this->transport()->writeAsyncCSV($sql, $fileName);
         }
 
@@ -512,7 +541,7 @@ class Client
         $exec = $this->executeAsync();
 
         // fetch resutl
-        foreach ($file_names as $fileName) {
+        foreach ((array)$fileNames as $fileName) {
             if ($result[$fileName]->isError()) {
                 $result[$fileName]->error();
             }
@@ -522,33 +551,24 @@ class Client
     }
 
     /**
-     * @param $table_name
-     * @param $stream
-     * @param $columns_array
+     * @param string $tableName
+     * @param array $columns_array
      * @param string $format
+     *
      * @return \Curler\Request
      */
-    public function insertBatchStream($table_name, $columns_array,$format="CSV")
+    public function insertBatchStream($tableName, $columns_array, $format = self::FORMAT_CSV)
     {
         if ($this->getCountPendingQueue() > 0) {
             throw new QueryException('Queue must be empty, before insertBatch, need executeAsync');
         }
 
-        if (!in_array($format,$this->_support_format))
-        {
+        if (!in_array($format, self::$supportedFormats, true)) {
             throw new QueryException('Format not support in insertBatchFiles');
         }
 
-        if (!$columns_array)
-        {
-            $sql = 'INSERT INTO ' . $table_name . ' FORMAT '.$format;
-
-        }
-        else
-        {
-            $sql = 'INSERT INTO ' . $table_name . ' ( ' . implode(',', $columns_array) . ' ) FORMAT '.$format;
-
-        }
+        $sql = 'INSERT INTO ' . $tableName . (!empty($columnsArray) ? (' ( ' . implode(', ',
+                    $columnsArray) . ' )') : '') . ' FORMAT ' . $format;
 
         return $this->transport()->writeStreamData($sql);
     }
@@ -561,20 +581,19 @@ class Client
      */
     public function databaseSize()
     {
-        $b = $this->settings()->getDatabase();
-
         return $this->select('
             SELECT database,formatReadableSize(sum(bytes)) as size
             FROM system.parts
             WHERE active AND database=:database
             GROUP BY database
-        ', ['database' => $b])->fetchOne();
+        ', ['database' => $this->settings()->getDatabase()])->fetchOne();
     }
 
     /**
      * Размер таблицы
      *
      * @param $tableName
+     *
      * @return mixed
      */
     public function tableSize($tableName)
@@ -593,18 +612,20 @@ class Client
      */
     public function ping()
     {
-        $result = $this->select('SELECT 1 as ping')->fetchOne('ping');
-        return ($result == 1);
+        $result = (int)$this->select('SELECT 1 as ping')->fetchOne('ping');
+        return $result === 1;
     }
 
     /**
      * Размеры таблиц
      *
+     * @param bool $flatList
+     *
      * @return array
      */
-    public function tablesSize($flatList=false)
+    public function tablesSize(bool $flatList = false)
     {
-        $z=$this->select('
+        $statement = $this->select('
             SELECT table,database,
             formatReadableSize(sum(bytes)) as size,
             sum(bytes) as sizebytes,
@@ -616,25 +637,24 @@ class Client
         ');
 
         if ($flatList) {
-            return $z->rows();
+            return $statement->rows();
         }
 
-        return $z->rowsAsTree('table');
-
-
+        return $statement->rowsAsTree('table');
     }
 
-    public function isExists($database,$table)
+    public function isExists($database, $table)
     {
         return $this->select('
             SELECT *
             FROM system.tables 
-            WHERE name=\''.$table.'\' AND database=\''.$database.'\''
-        )->rowsAsTree('name');
+            WHERE name=' . self::quoteName($table) . ' AND database=' . self::quoteName($database))->rowsAsTree('name');
     }
+
     /**
      * @param $table
      * @param int $limit
+     *
      * @return array
      */
     public function partitions($table, $limit = -1)
@@ -642,52 +662,61 @@ class Client
         return $this->select('
             SELECT *
             FROM system.parts 
-            WHERE like(table,\'%' . $table . '%\')  
-            ORDER BY max_date ' . ($limit > 0 ? ' LIMIT ' . intval($limit) : '')
-        )->rowsAsTree('name');
+            WHERE like(table,' . self::quoteName('%' . $table . '%') . ')  
+            ORDER BY max_date ' . ($limit > 0 ? (' LIMIT ' . (int)$limit) : ''))->rowsAsTree('name');
     }
 
     /**
      * @param $tableName
      * @param $partition_id
+     *
+     * @return bool
      */
     public function dropPartition($tableName, $partition_id)
     {
-
         $state = $this->write('ALTER TABLE {tableName} DROP PARTITION :partion_id', [
-            'tableName'  => $tableName,
+            'tableName' => $tableName,
             'partion_id' => $partition_id
         ]);
+
         return true;
     }
 
-
-    public function truncateTable($tableName)
+    /**
+     * @param string $tableName
+     *
+     * @return array
+     */
+    public function truncateTable(string $tableName)
     {
-        $partions=$this->partitions($tableName);
-        $out=[];
-        foreach ($partions as $part_key=>$part)
-        {
-            $part_id=$part['partition'];
-            $out[$part_id]=$this->dropPartition($tableName,$part_id);
+        $parts = $this->partitions($tableName);
+        $out = [];
+        foreach ($parts as $part) {
+            $partId = $part['partition'];
+            $out[$partId] = $this->dropPartition($tableName, $partId);
         }
+
         return $out;
     }
 
     /**
-     * @param $table_name
-     * @param $days_ago
-     * @param int $count_partitons_per_one
+     * @param string $tableName
+     * @param int $daysAgo
+     * @param int $countPartitionsPerOne
+     *
      * @return array
      */
-    public function dropOldPartitions($table_name, $days_ago, $count_partitons_per_one = 100)
-    {
-        $days_ago = strtotime(date('Y-m-d 00:00:00', strtotime('-' . $days_ago . ' day')));
+    public function dropOldPartitions(
+        string $tableName,
+        int $daysAgo,
+        int $countPartitionsPerOne = self::PARTITIONS_CHUNK_SIZE
+    ) {
+        $daysAgo = strtotime(date('Y-m-d 00:00:00', strtotime('-' . $daysAgo . ' day')));
 
         $drop = [];
-        $list_patitions = $this->partitions($table_name, $count_partitons_per_one);
+        $listPartitions = $this->partitions($tableName, $countPartitionsPerOne);
 
-        foreach ($list_patitions as $partion_id => $partition) {
+        foreach ($listPartitions as $partion_id => $partition) {
             if (stripos($partition['engine'], 'mergetree') === false) {
                 continue;
             }
@@ -695,17 +724,26 @@ class Client
             $min_date = strtotime($partition['min_date']);
             $max_date = strtotime($partition['max_date']);
 
-            if ($max_date < $days_ago) {
+            if ($max_date < $daysAgo) {
                 $drop[] = $partition['partition'];
             }
         }
 
         foreach ($drop as $partition_id) {
-            $this->dropPartition($table_name, $partition_id);
+            $this->dropPartition($tableName, $partition_id);
         }
 
         return $drop;
     }
 
+    /**
+     * @param string $param
+     *
+     * @return string
+     */
+    public static function quoteName(string $param)
+    {
+        return '\'' . $param . '\'';
+    }
 
 }

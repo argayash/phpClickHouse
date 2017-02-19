@@ -21,21 +21,21 @@ class Query
     /**
      * @var array
      */
-    private $degenerations=[];
+    protected $degenerations = [];
 
     /**
      * Query constructor.
+     *
      * @param $sql
-     * @param array $bindings
+     * @param array $degenerations
      */
-    public function __construct($sql,$degenerations=[])
+    public function __construct($sql, $degenerations = [])
     {
-        if (!trim($sql))
-        {
+        if (!trim($sql)) {
             throw new QueryException('Empty Query');
         }
         $this->sql = $sql;
-        $this->degenerations=$degenerations;
+        $this->degenerations = $degenerations;
     }
 
     /**
@@ -55,12 +55,11 @@ class Query
             $this->sql = $this->sql . ' FORMAT ' . $this->format;
         }
 
-        if (sizeof($this->degenerations))
-        {
-            foreach ($this->degenerations as $degeneration)
-            {
-                if ($degeneration instanceof \ClickHouseDB\Query\Degeneration)
-                $this->sql=$degeneration->process($this->sql);
+        if (count($this->degenerations)) {
+            foreach ($this->degenerations as $degeneration) {
+                if ($degeneration instanceof \ClickHouseDB\Query\Degeneration) {
+                    $this->sql = $degeneration->process($this->sql);
+                }
             }
         }
 
