@@ -471,11 +471,11 @@ class Request
 
 
     /**
-     * @param $data
+     * @param string $data
      * @return $this
      * @throws \ClickHouseDB\TransportException
      */
-    public function parameters_json($data)
+    public function parametersJson($data)
     {
 
         $this->header("Content-Type", "application/json, text/javascript; charset=utf-8");

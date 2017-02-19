@@ -14,88 +14,88 @@ class Statement
     /**
      * @var
      */
-    private $_rawData;
+    protected $rawData;
 
     /**
      * @var int
      */
-    private $_http_code = -1;
+    protected $httpCode = -1;
 
     /**
      * @var Request|null
      */
-    private $_request = null;
+    protected $request;
 
     /**
      * @var bool
      */
-    private $_init = false;
+    protected $init = false;
 
     /**
      * @var Query
      */
-    private $query;
+    protected $query;
 
     /**
      * @var string
      */
-    private $sql = false;
+    protected $sql;
 
     /**
      * @var array
      */
-    private $meta;
+    protected $meta = [];
 
     /**
      * @var array
      */
-    private $data;
+    protected $data = [];
 
     /**
      * @var array
      */
-    private $totals;
+    protected $totals = [];
 
     /**
      * @var array
      */
-    private $extremes;
+    protected $extremes = [];
 
     /**
      * @var int
      */
-    private $rows;
+    protected $rows = 0;
+
+    /**
+     * @var int
+     */
+    protected $rows_before_limit_at_least = 0;
 
     /**
      * @var
      */
-    private $rows_before_limit_at_least = false;
-
-    /**
-     * @var
-     */
-    private $rawResult;
+    protected $rawResult;
 
     /**
      * @var array
      */
-    private $array_data = [];
+    protected $arrayData = [];
 
     /**
      * @var array
      */
-    private $statistics;
-
+    protected $statistics;
 
     /**
      * Statement constructor.
+     *
      * @param Request $request
      */
     public function __construct(Request $request)
     {
-        $this->_request = $request;
-        $this->query = $this->_request->getRequestExtendedInfo('query');
-        $this->sql = $this->_request->getRequestExtendedInfo('sql');
+        $this->setRequest($request);
+        $this->query = $this->request->getRequestExtendedInfo('query');
+        $this->sql = $this->request->getRequestExtendedInfo('sql');
     }
 
     /**
@@ -103,14 +103,27 @@ class Statement
      */
     public function getRequest()
     {
-        return $this->_request;
+        return $this->request;
     }
+
+    /**
+     * @param Request $request
+     *
+     * @return self
+     */
+    public function setRequest(Request $request)
+    {
+        $this->request = $request;
+
+        return $this;
+    }
+
     /**
      * @return Response
      */
-    private function response()
+    protected function response()
     {
-        return $this->_request->response();
+        return $this->getRequest()->response();
     }
 
     public function responseInfo()
@@ -128,9 +141,10 @@ class Statement
 
     /**
      * @param $body
+     *
      * @return array|bool
      */
-    private function parseErrorClickHouse($body)
+    protected function parseErrorClickHouse($body)
     {
         $body = trim($body);
         $mathes = [];
@@ -139,7 +153,8 @@ class Statement
         // Code: 192, e.displayText() = DB::Exception: Unknown user x, e.what() = DB::Exception
         // Code: 60, e.displayText() = DB::Exception: Table default.ZZZZZ doesn't exist., e.what() = DB::Exception
 
-        if (preg_match("%Code: (\d+),\se\.displayText\(\) \=\s*DB\:\:Exception\s*:\s*(.*)\,\s*e\.what.*%ius", $body, $mathes)) {
+        if (preg_match("%Code: (\d+),\se\.displayText\(\) \=\s*DB\:\:Exception\s*:\s*(.*)\,\s*e\.what.*%ius", $body,
+            $mathes)) {
             return ['code' => $mathes[1], 'message' => $mathes[2]];
         }
 
@@ -157,20 +172,18 @@ class Statement
 
         $body = $this->response()->body();
         $error_no = $this->response()->error_no();
-        $error=$this->response()->error();
+        $error = $this->response()->error();
 
         if (!$error_no && !$error) {
             $parse = $this->parseErrorClickHouse($body);
 
             if ($parse) {
                 throw new DatabaseException($parse['message'] . "\nIN:" . $this->sql(), $parse['code']);
-            }
-            else {
+            } else {
                 $code = $this->response()->http_code();
-                $message = "HttpCode:" . $this->response()->http_code() . " ; ".$this->response()->error()." ;" . $body;
+                $message = "HttpCode:" . $this->response()->http_code() . " ; " . $this->response()->error() . " ;" . $body;
             }
-        }
-        else {
+        } else {
             $code = $error_no;
             $message = $this->response()->error();
         }
@@ -190,9 +203,9 @@ class Statement
      *
      * @return bool
      */
-    private function check()
+    protected function check()
     {
-        if (!$this->_request->isResponseExists()) {
+        if (!$this->request->isResponseExists()) {
             throw new QueryException('Not have response');
         }
 
@@ -202,28 +215,29 @@ class Statement
 
         return true;
     }
+
     /**
      * @return bool
      */
-    private function init()
+    protected function init()
     {
-        if ($this->_init) {
+        if ($this->init) {
             return false;
         }
 
         $this->check();
 
 
-        $this->_rawData = $this->response()->json();
+        $this->rawData = $this->response()->json();
 
-        if (!$this->_rawData) {
-            $this->_init = true;
+        if (!$this->rawData) {
+            $this->init = true;
             return false;
         }
 
-        foreach (['meta', 'data', 'totals', 'extremes', 'rows', 'rows_before_limit_at_least','statistics'] as $key) {
-            if (isset($this->_rawData[$key])) {
-                $this->{$key} = $this->_rawData[$key];
+        foreach (['meta', 'data', 'totals', 'extremes', 'rows', 'rows_before_limit_at_least', 'statistics'] as $key) {
+            if (isset($this->rawData[$key])) {
+                $this->{$key} = $this->rawData[$key];
             }
         }
 
@@ -231,7 +245,7 @@ class Statement
             throw  new QueryException('Can`t find meta');
         }
 
-        $this->array_data = [];
+        $this->arrayData = [];
         foreach ($this->data as $rows) {
             $r = [];
 
@@ -239,7 +253,7 @@ class Statement
                 $r[$meta['name']] = $rows[$meta['name']];
             }
 
-            $this->array_data[] = $r;
+            $this->arrayData[] = $r;
         }
 
         return true;
@@ -309,7 +323,7 @@ class Statement
      */
     public function dumpRaw()
     {
-        print_r($this->_rawData);
+        print_r($this->rawData);
     }
 
     /**
@@ -317,7 +331,7 @@ class Statement
      */
     public function dump()
     {
-        $this->_request->dump();
+        $this->request->dump();
         $this->response()->dump();
     }
 
@@ -327,20 +341,25 @@ class Statement
     public function countAll()
     {
         $this->init();
+
         return $this->rows_before_limit_at_least;
     }
 
     /**
      * @param bool $key
+     *
      * @return array|mixed|null
      */
-    public function statistics($key=false)
+    public function statistics($key = false)
     {
         $this->init();
-        if ($key)
-        {
-            if (!is_array($this->statistics)) return null;
-            if (!isset($this->statistics[$key])) return null;
+        if ($key) {
+            if (!is_array($this->statistics)) {
+                return null;
+            }
+            if (!isset($this->statistics[$key])) {
+                return null;
+            }
             return $this->statistics[$key];
         }
         return $this->statistics;
@@ -362,33 +381,34 @@ class Statement
      */
     public function rawData()
     {
-        if ($this->_init) {
-            return $this->_rawData;
+        if ($this->init) {
+            return $this->rawData;
         }
 
         $this->check();
 
         return $this->response()->json();
     }
+
     /**
      * @param bool $key
+     *
      * @return mixed|null
      */
     public function fetchOne($key = false)
     {
         $this->init();
 
-        if (isset($this->array_data[0])) {
+        if (isset($this->arrayData[0])) {
             if ($key) {
-                if (isset($this->array_data[0][$key])) {
-                    return $this->array_data[0][$key];
-                }
-                else {
+                if (isset($this->arrayData[0][$key])) {
+                    return $this->arrayData[0][$key];
+                } else {
                     return null;
                 }
             }
 
-            return $this->array_data[0];
+            return $this->arrayData[0];
         }
 
         return null;
@@ -396,6 +416,7 @@ class Statement
 
     /**
      * @param $path
+     *
      * @return array
      */
     public function rowsAsTree($path)
@@ -403,8 +424,8 @@ class Statement
         $this->init();
 
         $out = [];
-        foreach ($this->array_data as $row) {
-            $d = $this->array_to_tree($row, $path);
+        foreach ($this->arrayData as $row) {
+            $d = $this->arrayToTree($row, $path);
             $out = array_replace_recursive($d, $out);
         }
 
@@ -420,10 +441,10 @@ class Statement
     {
         $this->check();
         return [
-            'size_upload'    => $this->response()->size_upload(),
+            'size_upload' => $this->response()->size_upload(),
             'upload_content' => $this->response()->upload_content_length(),
-            'speed_upload'   => $this->response()->speed_upload(),
-            'time_request'   => $this->response()->total_time()
+            'speed_upload' => $this->response()->speed_upload(),
+            'time_request' => $this->response()->total_time()
         ];
     }
 
@@ -436,13 +457,13 @@ class Statement
     {
         $this->check();
         return [
-            'starttransfer_time'    => $this->response()->starttransfer_time(),
-            'size_download'    => $this->response()->size_download(),
-            'speed_download'    => $this->response()->speed_download(),
-            'size_upload'    => $this->response()->size_upload(),
+            'starttransfer_time' => $this->response()->starttransfer_time(),
+            'size_download' => $this->response()->size_download(),
+            'speed_download' => $this->response()->speed_download(),
+            'size_upload' => $this->response()->size_upload(),
             'upload_content' => $this->response()->upload_content_length(),
-            'speed_upload'   => $this->response()->speed_upload(),
-            'time_request'   => $this->response()->total_time()
+            'speed_upload' => $this->response()->speed_upload(),
+            'time_request' => $this->response()->total_time()
         ];
     }
 
@@ -452,45 +473,41 @@ class Statement
     public function rows()
     {
         $this->init();
-        return $this->array_data;
+        return $this->arrayData;
     }
 
     /**
      * @param $arr
-     * @param null $path
+     * @param mixed $path
+     *
      * @return array
      */
-    private function array_to_tree($arr, $path = null)
+    protected function arrayToTree($arr, $path = null)
     {
         if (is_array($path)) {
             $keys = $path;
-        }
-        else {
+        } else {
             $args = func_get_args();
             array_shift($args);
 
-            if (sizeof($args) < 2) {
+            if (count($args) < 2) {
                 $separator = '.';
                 $keys = explode($separator, $path);
-            }
-            else {
+            } else {
                 $keys = $args;
             }
         }
 
-        //
         $tree = $arr;
         while (count($keys)) {
             $key = array_pop($keys);
+            $val = $key;
 
             if (isset($arr[$key])) {
                 $val = $arr[$key];
             }
-            else {
-                $val = $key;
-            }
 
-            $tree = array($val => $tree);
+            $tree = [$val => $tree];
         }
 
         return $tree;

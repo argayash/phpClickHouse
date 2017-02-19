@@ -12,10 +12,10 @@ use ClickHouseDB\Transport\Http;
  */
 class Client
 {
-    const FORMAT_TAB_SEPARATED = 'TabSeparated';
-    const FORMAT_TAB_SEPARATED_WITH_NAMES = 'TabSeparatedWithNames';
-    const FORMAT_CSV = 'CSV';
-    const FORMAT_CSV_WITH_NAMES = 'CSVWithNames';
+    const FILE_FORMAT_TAB_SEPARATED = 'TabSeparated';
+    const FILE_FORMAT_TAB_SEPARATED_WITH_NAMES = 'TabSeparatedWithNames';
+    const FILE_FORMAT_CSV = 'CSV';
+    const FILE_FORMAT_CSV_WITH_NAMES = 'CSVWithNames';
 
     const PARTITIONS_CHUNK_SIZE = 100;
 
@@ -52,10 +52,10 @@ class Client
      * @var array
      */
     protected static $supportedFormats = [
-        self::FORMAT_TAB_SEPARATED,
-        self::FORMAT_TAB_SEPARATED_WITH_NAMES,
-        self::FORMAT_CSV,
-        self::FORMAT_CSV_WITH_NAMES
+        self::FILE_FORMAT_TAB_SEPARATED,
+        self::FILE_FORMAT_TAB_SEPARATED_WITH_NAMES,
+        self::FILE_FORMAT_CSV,
+        self::FILE_FORMAT_CSV_WITH_NAMES
     ];
 
     /**
@@ -499,7 +499,7 @@ class Client
      */
     public function insertBatchTSVFiles($tableName, $fileNames, $columnsArray)
     {
-        return $this->insertBatchFiles($tableName, $fileNames, $columnsArray, self::FORMAT_TAB_SEPARATED);
+        return $this->insertBatchFiles($tableName, $fileNames, $columnsArray, self::FILE_FORMAT_TAB_SEPARATED);
     }
 
     /**
@@ -511,7 +511,7 @@ class Client
      *
      * @return array
      */
-    public function insertBatchFiles($tableName, $fileNames, array $columnsArray, $format = self::FORMAT_CSV)
+    public function insertBatchFiles($tableName, $fileNames, array $columnsArray, $format = self::FILE_FORMAT_CSV)
     {
         if (is_string($fileNames)) {
             $fileNames = [$fileNames];
@@ -557,7 +557,7 @@ class Client
      *
      * @return \Curler\Request
      */
-    public function insertBatchStream($tableName, $columns_array, $format = self::FORMAT_CSV)
+    public function insertBatchStream($tableName, $columns_array, $format = self::FILE_FORMAT_CSV)
     {
         if ($this->getCountPendingQueue() > 0) {
             throw new QueryException('Queue must be empty, before insertBatch, need executeAsync');
@@ -745,5 +745,4 @@ class Client
     {
         return '\'' . $param . '\'';
     }
-
 }

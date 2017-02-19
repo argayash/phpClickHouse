@@ -19,49 +19,49 @@ class Http
     /**
      * @var string
      */
-    private $_username = null;
+    protected $username;
 
     /**
      * @var string
      */
-    private $_password = null;
+    protected $password;
 
     /**
      * @var string
      */
-    private $_host = '';
+    protected $host = '';
 
     /**
      * @var int
      */
-    private $_port = 0;
+    protected $port = 0;
 
     /**
      * @var bool
      */
-    private $_verbose = false;
+    protected $verbose = false;
 
     /**
      * @var CurlerRolling
      */
-    private $_curler = false;
+    protected $curler = false;
 
     /**
      * @var Settings
      */
-    private $_settings = false;
+    protected $settings = false;
 
     /**
      * @var array
      */
-    private $_query_degenerations = [];
+    protected $queryDegenerations = [];
 
     /**
      * Количество секунд ожидания при попытке соединения
      *
      * @var int
      */
-    private $_connectTimeOut = 5;
+    protected $connectTimeOut = 5;
 
     /**
      * Http constructor.
@@ -75,17 +75,17 @@ class Http
     {
         $this->setHost($host, $port);
 
-        $this->_username = $username;
-        $this->_password = $password;
-        $this->_settings = new Settings($this);
+        $this->username = $username;
+        $this->password = $password;
 
-        $this->setCurler();
+        $this->setSettings(new Settings($this));
+        $this->setCurler(new CurlerRolling());
     }
 
 
-    public function setCurler()
+    public function setCurler(CurlerRolling $curlerRolling)
     {
-        $this->_curler = new CurlerRolling();
+        $this->curler = $curlerRolling;
     }
 
     /**
@@ -93,7 +93,7 @@ class Http
      */
     public function getCurler()
     {
-        return $this->_curler;
+        return $this->curler;
     }
 
     /**
@@ -103,10 +103,10 @@ class Http
     public function setHost($host, $port = -1)
     {
         if ($port > 0) {
-            $this->_port = $port;
+            $this->port = $port;
         }
 
-        $this->_host = $host;
+        $this->host = $host;
     }
 
     /**
@@ -114,7 +114,7 @@ class Http
      */
     public function getUri()
     {
-        return 'http://' . $this->_host . ':' . $this->_port;
+        return 'http://' . $this->host . ':' . $this->port;
     }
 
     /**
@@ -122,107 +122,118 @@ class Http
      */
     public function settings()
     {
-        return $this->_settings;
+        if (!$this->getSettings()) {
+            throw  new \InvalidArgumentException('Empty settings class');
+        }
+        return $this->settings;
+    }
+
+    /**
+     * @return Settings
+     */
+    public function getSettings()
+    {
+        return $this->settings;
+    }
+
+    /**
+     * @param Settings $settings
+     */
+    public function setSettings(Settings $settings)
+    {
+        $this->settings = $settings;
     }
 
     /**
      * @param $flag
+     *
      * @return mixed
      */
     public function verbose($flag)
     {
-        $this->_verbose = $flag;
+        $this->verbose = $flag;
         return $flag;
     }
 
     /**
      * @param array $params
+     *
      * @return string
      */
-    private function getUrl($params = [])
+    protected function getUrl(array $params = []): string
     {
         $settings = $this->settings()->getSettings();
 
-        if (is_array($params) && sizeof($params)) {
+        if (is_array($params) && count($params)) {
             $settings = array_merge($settings, $params);
         }
 
-
-        if ($this->settings()->isReadOnlyUser())
-        {
-            unset($settings['extremes']);
-            unset($settings['readonly']);
-            unset($settings['enable_http_compression']);
-            unset($settings['max_execution_time']);
-
+        if ($this->settings()->isReadOnlyUser()) {
+            unset($settings['extremes'], $settings['readonly'], $settings['enable_http_compression'], $settings['max_execution_time']);
         }
-
 
         return $this->getUri() . '?' . http_build_query($settings);
     }
 
     /**
-     * @param $extendinfo
+     * @param $extendInfo
+     *
      * @return Request
      */
-    private function newRequest($extendinfo)
+    protected function newRequest($extendInfo)
     {
-        $new = new \Curler\Request();
-        $new->auth($this->_username, $this->_password)
-            ->POST()
-            ->setRequestExtendedInfo($extendinfo);
+        $request = new Request();
+        $request->auth($this->username, $this->password)->POST()->setRequestExtendedInfo($extendInfo);
 
         if ($this->settings()->isEnableHttpCompression()) {
-            $new->httpCompression(true);
+            $request->httpCompression(true);
         }
 
-        $new->timeOut($this->settings()->getTimeOut());
-        $new->connectTimeOut($this->_connectTimeOut)->keepAlive();// one sec
-        $new->verbose($this->_verbose);
+        $request->timeOut($this->settings()->getTimeOut());
+        $request->connectTimeOut($this->getConnectTimeOut())->keepAlive();// one sec
+        $request->verbose($this->verbose);
 
-        return $new;
+        return $request;
     }
 
     /**
      * @param Query $query
      * @param array $urlParams
-     * @param bool $query_as_string
+     * @param bool $queryAsString
+     *
      * @return Request
      */
-    private function makeRequest(Query $query, $urlParams = [], $query_as_string = false)
+    protected function makeRequest(Query $query, array $urlParams = [], $queryAsString = false)
     {
         $sql = $query->toSql();
 
-        if ($query_as_string) {
+        if ($queryAsString) {
             $urlParams['query'] = $sql;
         }
 
         $url = $this->getUrl($urlParams);
 
-        $extendinfo = [
+        $extendInfo = [
             'sql' => $sql,
             'query' => $query
         ];
 
-        $new = $this->newRequest($extendinfo);
-        $new->url($url);
+        $request = $this->newRequest($extendInfo);
+        $request->url($url);
 
-
-
-
-        if (!$query_as_string) {
-            $new->parameters_json($sql);
+        if (!$queryAsString) {
+            $request->parametersJson($sql);
         }
         if ($this->settings()->isEnableHttpCompression()) {
-            $new->httpCompression(true);
+            $request->httpCompression(true);
         }
 
-        return $new;
+        return $request;
     }
 
     /**
      * @param $sql
-     * @param $stream
+     *
      * @return Request
      */
     public function writeStreamData($sql)
@@ -234,12 +245,12 @@ class Http
             'query' => $query->toSql()
         ]);
 
-        $extendinfo = [
+        $extendInfo = [
             'sql' => $sql,
             'query' => $query
         ];
 
-        $request = $this->newRequest($extendinfo);
+        $request = $this->newRequest($extendInfo);
         $request->url($url);
         return $request;
     }
@@ -247,10 +258,11 @@ class Http
 
     /**
      * @param $sql
-     * @param $file_name
+     * @param $fileName
+     *
      * @return Statement
      */
-    public function writeAsyncCSV($sql, $file_name)
+    public function writeAsyncCSV($sql, $fileName)
     {
         $query = new Query($sql);
 
@@ -259,20 +271,21 @@ class Http
             'query' => $query->toSql()
         ]);
 
-        $extendinfo = [
+        $extendInfo = [
             'sql' => $sql,
             'query' => $query
         ];
 
-        $request = $this->newRequest($extendinfo);
+        $request = $this->newRequest($extendInfo);
         $request->url($url);
 
         $request->setCallbackFunction(function (Request $request) {
             fclose($request->getInfileHandle());
         });
 
-        $request->setInfile($file_name);
-        $this->_curler->addQueLoop($request);
+        $request->setInfile($fileName);
+
+        $this->getCurler()->addQueLoop($request);
 
         return new Statement($request);
     }
@@ -282,7 +295,7 @@ class Http
      */
     public function getCountPendingQueue()
     {
-        return $this->_curler->countPending();
+        return $this->curler->countPending();
     }
 
     /**
@@ -292,7 +305,7 @@ class Http
      */
     public function setConnectTimeOut($connectTimeOut)
     {
-        $this->_connectTimeOut = $connectTimeOut;
+        $this->connectTimeOut = $connectTimeOut;
     }
 
     /**
@@ -302,25 +315,27 @@ class Http
      */
     public function getConnectTimeOut()
     {
-        return $this->_connectTimeOut;
+        return $this->connectTimeOut;
     }
 
     /**
      * @param Query $query
      * @param null $whereInFile
+     * @param null $writeToFile
+     *
      * @return Request
      */
     public function getRequestRead(Query $query, $whereInFile = null, $writeToFile = null)
     {
         $urlParams = ['readonly' => 1];
-        $query_as_string = false;
+        $queryAsString = false;
         // ---------------------------------------------------------------------------------
         if ($whereInFile instanceof WhereInFile && $whereInFile->size()) {
             // $request = $this->prepareSelectWhereIn($request, $whereInFile);
             $structure = $whereInFile->fetchUrlParams();
             // $structure = [];
             $urlParams = array_merge($urlParams, $structure);
-            $query_as_string = true;
+            $queryAsString = true;
         }
         // ---------------------------------------------------------------------------------
         // if result to file
@@ -330,7 +345,7 @@ class Http
         }
         // ---------------------------------------------------------------------------------
         // makeRequest read
-        $request = $this->makeRequest($query, $urlParams, $query_as_string);
+        $request = $this->makeRequest($query, $urlParams, $queryAsString);
         // ---------------------------------------------------------------------------------
         // attach files
         if ($whereInFile instanceof WhereInFile && $whereInFile->size()) {
@@ -361,23 +376,23 @@ class Http
         }
         // ---------------------------------------------------------------------------------
         return $request;
-
     }
 
     public function cleanQueryDegeneration()
     {
-        $this->_query_degenerations = [];
+        $this->queryDegenerations = [];
         return true;
     }
 
     public function addQueryDegeneration(Query\Degeneration $degeneration)
     {
-        $this->_query_degenerations[] = $degeneration;
+        $this->queryDegenerations[] = $degeneration;
         return true;
     }
 
     /**
      * @param Query $query
+     *
      * @return Request
      */
     public function getRequestWrite(Query $query)
@@ -389,31 +404,31 @@ class Http
     /**
      * @param $sql
      * @param $bindings
+     *
      * @return Query
      */
-    private function prepareQuery($sql, $bindings)
+    protected function prepareQuery($sql, $bindings)
     {
-
-        // add Degeneration query
-        foreach ($this->_query_degenerations as $degeneration) {
+        foreach ($this->queryDegenerations as $degeneration) {
             $degeneration->bindParams($bindings);
         }
 
-        return new Query($sql, $this->_query_degenerations);
+        return new Query($sql, $this->queryDegenerations);
     }
 
     /**
      * @param $sql
-     * @param $bindings
+     * @param array $bindings
      * @param $whereInFile
+     * @param $writeToFile
+     *
      * @return Request
      */
-    private function prepareSelect($sql, $bindings, $whereInFile, $writeToFile = null)
+    protected function prepareSelect($sql, array $bindings = [], $whereInFile = null, $writeToFile = null): Request
     {
         if ($sql instanceof Query) {
             return $this->getRequestWrite($sql);
         }
-
 
         $query = $this->prepareQuery($sql, $bindings);
         $query->setFormat('JSON');
@@ -424,9 +439,10 @@ class Http
     /**
      * @param $sql
      * @param $bindings
+     *
      * @return Request
      */
-    private function prepareWrite($sql, $bindings = [])
+    protected function prepareWrite($sql, array $bindings = []): Request
     {
         if ($sql instanceof Query) {
             return $this->getRequestWrite($sql);
@@ -442,19 +458,21 @@ class Http
      */
     public function executeAsync()
     {
-        return $this->_curler->execLoopWait();
+        return $this->curler->execLoopWait();
     }
 
     /**
      * @param $sql
      * @param array $bindings
      * @param null $whereInFile
+     * @param null $writeToFile
+     *
      * @return Statement
      */
-    public function select($sql, array $bindings = [], $whereInFile = null, $writeToFile = null)
+    public function select($sql, array $bindings = [], $whereInFile = null, $writeToFile = null): Statement
     {
         $request = $this->prepareSelect($sql, $bindings, $whereInFile, $writeToFile);
-        $code = $this->_curler->execOne($request);
+        $code = $this->curler->execOne($request);
 
         return new Statement($request);
     }
@@ -463,12 +481,15 @@ class Http
      * @param $sql
      * @param array $bindings
      * @param null $whereInFile
+     * @param null $writeToFile
+     *
      * @return Statement
      */
-    public function selectAsync($sql, array $bindings = [], $whereInFile = null, $writeToFile = null)
+    public function selectAsync($sql, array $bindings = [], $whereInFile = null, $writeToFile = null): Statement
     {
         $request = $this->prepareSelect($sql, $bindings, $whereInFile, $writeToFile);
-        $this->_curler->addQueLoop($request);
+        $this->curler->addQueLoop($request);
+
         return new Statement($request);
     }
 
@@ -477,12 +498,13 @@ class Http
      * @param $sql
      * @param array $bindings
      * @param bool $exception
+     *
      * @return Statement
      */
-    public function write($sql, array $bindings = [], $exception = true)
+    public function write($sql, array $bindings = [], bool $exception = true): Statement
     {
         $request = $this->prepareWrite($sql, $bindings);
-        $code = $this->_curler->execOne($request);
+        $code = $this->curler->execOne($request);
 
         $response = new Statement($request);
         if ($exception) {
@@ -490,6 +512,7 @@ class Http
                 $response->error();
             }
         }
+
         return $response;
     }
 }
