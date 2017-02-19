@@ -227,8 +227,7 @@ class Statement
 
         $this->check();
 
-
-        $this->rawData = $this->response()->json();
+        $this->rawData = $this->request->getFormatHandler()->getResponseDataArray();
 
         if (!$this->rawData) {
             $this->init = true;
@@ -387,7 +386,7 @@ class Statement
 
         $this->check();
 
-        return $this->response()->json();
+        return $this->request->getFormatHandler()->getResponseDataArray();
     }
 
     /**

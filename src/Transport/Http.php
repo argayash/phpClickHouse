@@ -5,6 +5,8 @@ namespace ClickHouseDB\Transport;
 use ClickHouseDB\Query;
 use ClickHouseDB\Settings;
 use ClickHouseDB\Statement;
+use ClickHouseDB\Transport\FormatHandlers\FormatHandler;
+use ClickHouseDB\Transport\FormatHandlers\JSONHandler;
 use ClickHouseDB\WhereInFile;
 use ClickHouseDB\WriteToFile;
 use Curler\CurlerRolling;
@@ -82,7 +84,22 @@ class Http
         $this->setCurler(new CurlerRolling());
     }
 
+    /**
+     * @param Request $request
+     *
+     * @return FormatHandler
+     */
+    protected function createFormatHandler(Request $request): FormatHandler
+    {
+        $formatHandler = new JSONHandler();
+        $formatHandler->setRequest($request);
 
+        return $formatHandler;
+    }
+
+    /**
+     * @param CurlerRolling $curlerRolling
+     */
     public function setCurler(CurlerRolling $curlerRolling)
     {
         $this->curler = $curlerRolling;
@@ -183,6 +200,8 @@ class Http
     protected function newRequest($extendInfo)
     {
         $request = new Request();
+        $request->setFormatHandler($this->createFormatHandler($request));
+
         $request->auth($this->username, $this->password)->POST()->setRequestExtendedInfo($extendInfo);
 
         if ($this->settings()->isEnableHttpCompression()) {
@@ -219,10 +238,11 @@ class Http
         ];
 
         $request = $this->newRequest($extendInfo);
+
         $request->url($url);
 
         if (!$queryAsString) {
-            $request->parametersJson($sql);
+            $request->setParameters($sql);
         }
         if ($this->settings()->isEnableHttpCompression()) {
             $request->httpCompression(true);
@@ -433,7 +453,6 @@ class Http
         $query = $this->prepareQuery($sql, $bindings);
         $query->setFormat('JSON');
         return $this->getRequestRead($query, $whereInFile, $writeToFile);
-
     }
 
     /**

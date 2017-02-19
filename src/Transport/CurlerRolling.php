@@ -193,7 +193,7 @@ class CurlerRolling
             }
             else {
                 $r = explode(': ', $line);
-                if (sizeof($r) == 2) {
+                if (count($r) == 2) {
                     $headers[$r[0]] = $r[1];
                 }
             }
@@ -207,7 +207,7 @@ class CurlerRolling
      */
     public function countPending()
     {
-        return sizeof($this->pendingRequests);
+        return count($this->pendingRequests);
     }
 
     /**
@@ -287,7 +287,7 @@ class CurlerRolling
      */
     public function getInfo()
     {
-        return "runningRequests = {$this->runningRequests} , pending=" . sizeof($this->pendingRequests) . " ";
+        return "runningRequests = {$this->runningRequests} , pending=" . count($this->pendingRequests) . " ";
     }
 
     /**
@@ -317,8 +317,7 @@ class CurlerRolling
             $task_id = $this->handleMapTasks[$key];
             $request = $this->pendingRequests[$this->handleMapTasks[$key]];
 
-            unset($this->handleMapTasks[$key]);
-            unset($this->activeRequests[$task_id]);
+            unset($this->handleMapTasks[$key], $this->activeRequests[$task_id]);
 
             $this->pendingRequests[$task_id]->setResponse($response);
             $this->pendingRequests[$task_id]->onCallback();
@@ -357,7 +356,7 @@ class CurlerRolling
         if ($active < $max) {
 
             $canAdd = $max - $active;
-            $pending = sizeof($this->pendingRequests);
+            $pending = count($this->pendingRequests);
 
             $add = array();
 
@@ -370,10 +369,10 @@ class CurlerRolling
                 }
             }
 
-            $this->_lashmakeQue_state .= ' sizeAdd=' . sizeof($add);
+            $this->_lashmakeQue_state .= ' sizeAdd=' . count($add);
 
-            if (sizeof($add)) {
-                if ($canAdd >= sizeof($add)) {
+            if (count($add)) {
+                if ($canAdd >= count($add)) {
                     $ll = $add;
                 }
                 else {

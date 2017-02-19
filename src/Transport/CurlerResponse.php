@@ -2,6 +2,8 @@
 
 namespace Curler;
 
+use ClickHouseDB\Transport\FormatHandlers\FormatHandler;
+
 /**
  * Class Response
  * @package Curler
@@ -38,12 +40,12 @@ class Response
      */
     public $_body;
 
-
     /**
      * Response constructor.
      */
-    public function __construct() {}
-
+    public function __construct()
+    {
+    }
 
     /**
      * @return int
@@ -74,7 +76,7 @@ class Response
      */
     public function total_time()
     {
-        return round($this->_info['total_time'],3);
+        return round($this->_info['total_time'], 3);
     }
 
     /**
@@ -82,7 +84,7 @@ class Response
      */
     public function starttransfer_time()
     {
-        return round($this->_info['starttransfer_time'],3);
+        return round($this->_info['starttransfer_time'], 3);
     }
 
     /**
@@ -90,7 +92,7 @@ class Response
      */
     public function connect_time()
     {
-        return round($this->_info['connect_time'],3);
+        return round($this->_info['connect_time'], 3);
     }
 
     /**
@@ -98,7 +100,7 @@ class Response
      */
     public function pretransfer_time()
     {
-        return round($this->_info['pretransfer_time'],3);
+        return round($this->_info['pretransfer_time'], 3);
     }
 
     /**
@@ -119,6 +121,7 @@ class Response
 
     /**
      * @param $name
+     *
      * @return null
      */
     public function headers($name)
@@ -159,11 +162,12 @@ class Response
      */
     public function dump_json()
     {
-        print_r($this->json());
+        print_r($this->body());
     }
 
     /**
      * @param bool $result
+     *
      * @return string
      */
     public function dump($result = false)
@@ -187,6 +191,7 @@ class Response
     /**
      * @param $size
      * @param string $unit
+     *
      * @return string
      */
     private function humanFileSize($size, $unit = '')
@@ -268,23 +273,5 @@ class Response
     public function info()
     {
         return $this->_info;
-    }
-    /**
-     * @param null $key
-     * @return bool|mixed
-     */
-    public function json($key = null)
-    {
-        $d = json_decode($this->body(), true);
-
-        if (!$key) {
-            return $d;
-        }
-
-        if (!isset($d[$key])) {
-            return false;
-        }
-
-        return $d[$key];
     }
 }
